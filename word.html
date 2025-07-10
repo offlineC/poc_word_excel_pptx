@@ -1,0 +1,49 @@
+  <input type="file" id="uploadDocx" accept=".docx">
+<div id="docxPreview" style="display:none;"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+document.getElementById('uploadDocx').addEventListener('change', function(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    mammoth.convertToHtml({arrayBuffer: e.target.result})
+      .then(function(result) {
+        const htmlContent = result.value;
+
+        // Put HTML into a hidden div for rendering
+        const previewDiv = document.getElementById('docxPreview');
+        previewDiv.innerHTML = htmlContent;
+        previewDiv.style.display = 'block';
+
+        generatePDFWithJsPDF(previewDiv);
+      })
+      .catch(function(err) {
+        console.error("Mammoth conversion error:", err);
+      });
+  };
+
+  reader.readAsArrayBuffer(file);
+});
+
+async function generatePDFWithJsPDF(htmlElement) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // html() renders DOM elements to PDF (autoPagination enabled)
+  await doc.html(htmlElement, {
+    callback: function (doc) {
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      window.open(url); // Opens in a new tab for preview
+    },
+    x: 10,
+    y: 10,
+    autoPaging: 'text',
+    html2canvas: { scale: 0.8 } // For scaling text/images
+  });
+}
+</script>

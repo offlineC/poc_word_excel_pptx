@@ -1,0 +1,50 @@
+<input type="file" id="uploadExcel" accept=".xlsx">
+<iframe id="pdfPreview" style="width:100%; height:600px; border:1px solid #ccc; margin-top:10px;"></iframe>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+document.getElementById('uploadExcel').addEventListener('change', async function(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = async function(e) {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: 'array' });
+
+    // Get first sheet
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    // Convert to JSON array of rows
+    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    generatePDF(jsonData);
+  };
+
+  reader.readAsArrayBuffer(file);
+});
+
+async function generatePDF(tableData) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  let startY = 10;
+  const marginX = 10;
+  const rowHeight = 8;
+  const colWidth = 40;
+
+  tableData.forEach((row, rowIndex) => {
+    row.forEach((cell, colIndex) => {
+      doc.text(String(cell ?? ""), marginX + colIndex * colWidth, startY + rowIndex * rowHeight);
+    });
+  });
+
+  // Convert to Blob and preview in iframe
+  const pdfBlob = doc.output('blob');
+  const pdfUrl = URL.createObjectURL(pdfBlob);
+
+  document.getElementById('pdfPreview').src = pdfUrl;
+}
+</script>

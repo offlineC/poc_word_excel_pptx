@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PPTX First Slide Text to PDF</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 2rem; }
+  #slideText { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; border-radius: 5px; min-height: 100px; margin-bottom: 1rem; }
+  iframe { width: 100%; height: 600px; border: 1px solid #ccc; }
+</style>
+</head>
+<body>
+
+<h1>PPTX First Slide Text Extractor + PDF Preview</h1>
+<input type="file" id="pptxFile" accept=".pptx" />
+<h2>Extracted Text from First Slide:</h2>
+<div id="slideText">Upload a PPTX file to see its first slide text here.</div>
+
+<h2>PDF Preview:</h2>
+<iframe id="pdfPreview" style="display:none;"></iframe>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+  const fileInput = document.getElementById("pptxFile");
+  const slideTextDiv = document.getElementById("slideText");
+  const pdfPreview = document.getElementById("pdfPreview");
+
+  fileInput.addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    slideTextDiv.textContent = "Reading file and extracting first slide...";
+    pdfPreview.style.display = "none";
+    pdfPreview.src = "";
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+
+      // Read slide1.xml
+      const slideFile = zip.file("ppt/slides/slide1.xml");
+      if (!slideFile) {
+        slideTextDiv.textContent = "Cannot find ppt/slides/slide1.xml in this file.";
+        return;
+      }
+      const slideXmlText = await slideFile.async("text");
+
+      // Parse XML
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(slideXmlText, "application/xml");
+
+      const ns = "http://schemas.openxmlformats.org/drawingml/2006/main";
+      const textElements = xmlDoc.getElementsByTagNameNS(ns, "t");
+
+      if (textElements.length === 0) {
+        slideTextDiv.textContent = "No text found on the first slide.";
+        return;
+      }
+
+      let extractedText = "";
+      for (let i = 0; i < textElements.length; i++) {
+        extractedText += textElements[i].textContent + "\n";
+      }
+
+      extractedText = extractedText.trim();
+      slideTextDiv.textContent = extractedText;
+
+      // Generate PDF from extractedText using jsPDF
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 15;
+      const maxLineWidth = pageWidth - margin * 2;
+      const fontSize = 12;
+      doc.setFontSize(fontSize);
+
+      // Split text into lines that fit page width
+      const lines = doc.splitTextToSize(extractedText, maxLineWidth);
+
+      doc.text(lines, margin, 20);
+
+      // Generate Blob URL from PDF
+      const pdfBlob = doc.output("blob");
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+
+      // Show PDF in iframe
+      pdfPreview.src = pdfUrl;
+      pdfPreview.style.display = "block";
+
+    } catch (err) {
+      slideTextDiv.textContent = "Error reading PPTX: " + err.message;
+    }
+  });
+</script>
+
+</body>
+</html>

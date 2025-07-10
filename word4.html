@@ -1,0 +1,116 @@
+<input type="file" id="uploadDocx" accept=".docx" />
+<iframe id="pdfPreview" style="width:100%; height:600px; border:1px solid #ccc; margin-top:10px;"></iframe>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+document.getElementById('uploadDocx').addEventListener('change', function (event) {
+  const file = event.target.files[0];
+  if (!file || !file.name.endsWith('.docx')) {
+    alert('Please upload a valid .docx file.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    mammoth.convertToHtml({ arrayBuffer: e.target.result })
+      .then(function (result) {
+        const htmlContent = result.value.trim();
+        console.log("Extracted HTML:", htmlContent);
+
+        if (!htmlContent) {
+          alert("The document appears to have no readable content.");
+          return;
+        }
+
+        generatePDFfromFormattedHTML(htmlContent);
+      })
+      .catch(function (err) {
+        console.error("Mammoth conversion error:", err);
+        alert("Failed to convert Word document.");
+      });
+  };
+
+  reader.readAsArrayBuffer(file);
+});
+
+function decodeHtmlEntities(text) {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text;
+  return textarea.value;
+}
+
+function generatePDFfromFormattedHTML(htmlString) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({
+    unit: 'pt',
+    format: 'a4'
+  });
+
+  // Create a temporary DOM element to parse the HTML content
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = htmlString;
+
+  const leftMargin = 40;
+  let cursorY = 50;
+  const pageHeight = doc.internal.pageSize.height;
+  const maxLineWidth = 520;
+  const lineHeight = 18;
+
+  // Helper to add text with page break support
+  function addTextWithLineBreaks(text) {
+    const lines = doc.splitTextToSize(text, maxLineWidth);
+    if (cursorY + lines.length * lineHeight > pageHeight - 40) {
+      doc.addPage();
+      cursorY = 50;
+    }
+    doc.text(lines, leftMargin, cursorY);
+    cursorY += lines.length * lineHeight;
+  }
+
+  // Process block-level elements: paragraphs and lists
+  Array.from(tempDiv.childNodes).forEach(node => {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.tagName === 'P') {
+        const text = decodeHtmlEntities(node.textContent.trim());
+        addTextWithLineBreaks(text);
+        cursorY += lineHeight / 2; // extra space after paragraph
+      } else if (node.tagName === 'UL' || node.tagName === 'OL') {
+        // handle lists
+        const isOrdered = node.tagName === 'OL';
+        let itemIndex = 1;
+        Array.from(node.children).forEach(li => {
+          if (li.tagName === 'LI') {
+            const bullet = isOrdered ? `${itemIndex}. ` : '\u2022 '; // bullet or number
+            const text = decodeHtmlEntities(li.textContent.trim());
+            addTextWithLineBreaks(bullet + text);
+            cursorY += lineHeight / 4;
+            itemIndex++;
+          }
+        });
+        cursorY += lineHeight / 2;
+      } else {
+        // fallback for other elements - just text content
+        const text = decodeHtmlEntities(node.textContent.trim());
+        if (text) {
+          addTextWithLineBreaks(text);
+          cursorY += lineHeight / 2;
+        }
+      }
+    } else if (node.nodeType === Node.TEXT_NODE) {
+      // Text node directly under div (rare in Mammoth output)
+      const text = decodeHtmlEntities(node.textContent.trim());
+      if (text) {
+        addTextWithLineBreaks(text);
+        cursorY += lineHeight / 2;
+      }
+    }
+  });
+
+  // Output PDF as blob url for iframe
+  const blob = doc.output('blob');
+  const blobUrl = URL.createObjectURL(blob);
+  document.getElementById('pdfPreview').src = blobUrl;
+}
+</script>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PPTX First Slide Text Extractor</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 2rem; }
+  #slideText { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; border-radius: 5px; min-height: 100px; }
+</style>
+</head>
+<body>
+
+<h1>PPTX First Slide Text Extractor (Client-Side)</h1>
+<input type="file" id="pptxFile" accept=".pptx" />
+<h2>Extracted Text from First Slide:</h2>
+<div id="slideText">Upload a PPTX file to see its first slide text here.</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+  const fileInput = document.getElementById("pptxFile");
+  const slideTextDiv = document.getElementById("slideText");
+
+  fileInput.addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    slideTextDiv.textContent = "Reading file and extracting first slide...";
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+
+      // Read slide1.xml
+      const slideFile = zip.file("ppt/slides/slide1.xml");
+      if (!slideFile) {
+        slideTextDiv.textContent = "Cannot find ppt/slides/slide1.xml in this file.";
+        return;
+      }
+      const slideXmlText = await slideFile.async("text");
+
+      // Parse XML
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(slideXmlText, "application/xml");
+
+      // Namespace-aware getElementsByTagNameNS for <a:t> tags
+      // The namespace URI for DrawingML (usually "http://schemas.openxmlformats.org/drawingml/2006/main")
+      const ns = "http://schemas.openxmlformats.org/drawingml/2006/main";
+      const textElements = xmlDoc.getElementsByTagNameNS(ns, "t");
+
+      if (textElements.length === 0) {
+        slideTextDiv.textContent = "No text found on the first slide.";
+        return;
+      }
+
+      // Join all text content with line breaks for readability
+      let extractedText = "";
+      for (let i = 0; i < textElements.length; i++) {
+        extractedText += textElements[i].textContent + "\n";
+      }
+
+      slideTextDiv.textContent = extractedText.trim();
+
+    } catch (err) {
+      slideTextDiv.textContent = "Error reading PPTX: " + err.message;
+    }
+  });
+</script>
+
+</body>
+</html>
