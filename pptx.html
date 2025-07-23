@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Upload PPTX and Convert to PDF</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <h2>Upload PPTX and Convert Slides to PDF</h2>
+  <input type="file" id="fileInput" accept=".pptx" />
+  <button id="convertBtn" disabled>Convert to PDF</button>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const convertBtn = document.getElementById("convertBtn");
+    let base64PPTX = "";
+
+    // fileInput.addEventListener("change", () => {
+    //   const file = fileInput.files[0];
+    //   if (!file) {
+    //     alert("Please select a file.");
+    //     convertBtn.disabled = true;
+    //     return;
+    //   }
+
+    //   const reader = new FileReader();
+    //   reader.onload = function(e) {
+    //     // This gives data URL like "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,XXXX"
+    //     const dataUrl = e.target.result;
+    //     base64PPTX = dataUrl.split(",")[1]; // Extract base64 part
+    //     convertBtn.disabled = false;
+    //   };
+    //   reader.readAsDataURL(file);
+    // });
+
+    convertBtn.addEventListener("click", async () => {
+      if (!base64PPTX) {
+        alert("No file loaded.");
+        return;
+      }
+
+      function base64ToUint8Array(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+      }
+
+      const { jsPDF } = window.jspdf;
+
+      try {
+        const zip = await JSZip.loadAsync(base64ToUint8Array(base64PPTX));
+        const slidePaths = Object.keys(zip.files).filter((f) =>
+          f.match(/^ppt\/slides\/slide\d+\.xml$/)
+        );
+
+        if (slidePaths.length === 0) {
+          alert("No slides found in PPTX.");
+          return;
+        }
+
+        const doc = new jsPDF();
+        let isFirst = true;
+
+        for (let i = 0; i < slidePaths.length; i++) {
+          const xmlContent = await zip.files[slidePaths[i]].async("string");
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
+          const texts = [...xmlDoc.getElementsByTagName("a:t")];
+          const slideText = texts.map((node) => node.textContent).join(" ");
+
+          if (!isFirst) doc.addPage();
+          doc.setFontSize(14);
+          doc.text(`Slide ${i + 1}`, 10, 15);
+          doc.setFontSize(11);
+          const lines = doc.splitTextToSize(slideText, 180);
+          doc.text(lines, 10, 25);
+          isFirst = false;
+        }
+
+        doc.save("slides.pdf");
+      } catch (err) {
+        alert("Error reading PPTX file: " + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
